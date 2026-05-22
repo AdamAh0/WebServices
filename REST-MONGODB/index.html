@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Products Live</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; }
+    h1 { color: #333; }
+    #status { padding: 8px 12px; border-radius: 4px; display: inline-block; margin-bottom: 20px; }
+    .connected { background: #d4edda; color: #155724; }
+    .disconnected { background: #f8d7da; color: #721c24; }
+    #products { list-style: none; padding: 0; }
+    #products li {
+      padding: 12px 16px; margin-bottom: 8px;
+      border: 1px solid #ddd; border-radius: 6px;
+      display: flex; justify-content: space-between;
+    }
+    #log { margin-top: 30px; }
+    #log h2 { font-size: 1rem; color: #666; }
+    #events { list-style: none; padding: 0; }
+    #events li {
+      padding: 6px 10px; margin-bottom: 4px;
+      border-radius: 4px; font-size: 0.85rem;
+    }
+    .created { background: #d4edda; color: #155724; }
+    .updated { background: #fff3cd; color: #856404; }
+    .deleted { background: #f8d7da; color: #721c24; }
+  </style>
+</head>
+<body>
+
+  <h1>🛍️ Products — Temps Réel</h1>
+  <div id="status" class="disconnected">⚪ Déconnecté</div>
+
+  <ul id="products"></ul>
+
+  <div id="log">
+    <h2>📋 Événements reçus :</h2>
+    <ul id="events"></ul>
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script>
+    const socket = io("http://localhost:8000");
+    const productsList = document.getElementById("products");
+    const eventsList   = document.getElementById("events");
+    const status       = document.getElementById("status");
+
+    // Charger les produits au démarrage
+    async function loadProducts() {
+      const res = await fetch("http://localhost:8000/products");
+      const products = await res.json();
+      productsList.innerHTML = "";
+      products.forEach(addProductToList);
+    }
+
+    function addProductToList(product) {
+      const li = document.createElement("li");
+      li.id = `product-${product._id}`;
+      li.innerHTML = `
+        <span><strong>${product.name}</strong> — ${product.about}</span>
+        <span>${product.price} €</span>
+      `;
+      productsList.appendChild(li);
+    }
+
+    function logEvent(type, message) {
+      const li = document.createElement("li");
+      li.className = type;
+      li.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+      eventsList.prepend(li);
+    }
+
+    // Connexion Socket.io
+    socket.on("connect", () => {
+      status.textContent = "🟢 Connecté";
+      status.className = "connected";
+      loadProducts();
+    });
+
+    socket.on("disconnect", () => {
+      status.textContent = "⚪ Déconnecté";
+      status.className = "disconnected";
+    });
+
+    // Écoute les événements produits
+    socket.on("products", ({ event, product, productId }) => {
+      if (event === "created") {
+        addProductToList(product);
+        logEvent("created", `✅ Produit créé : ${product.name}`);
+      }
+      if (event === "updated") {
+        const li = document.getElementById(`product-${product._id}`);
+        if (li) {
+          li.innerHTML = `
+            <span><strong>${product.name}</strong> — ${product.about}</span>
+            <span>${product.price} €</span>
+          `;
+        }
+        logEvent("updated", `✏️ Produit modifié : ${product.name}`);
+      }
+      if (event === "deleted") {
+        const li = document.getElementById(`product-${productId}`);
+        if (li) li.remove();
+        logEvent("deleted", `🗑️ Produit supprimé : ${productId}`);
+      }
+    });
+
+    loadProducts();
+  </script>
+</body>
+</html>
